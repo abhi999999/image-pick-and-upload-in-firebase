@@ -1,15 +1,11 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_prcatice/upload_images.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 
 import 'firebase_options.dart';
+import 'upload_images.dart';
 
-// void main() async {
-//   WidgetsFlutterBinding.ensureInitialized();
-//   await Firebase.initializeApp(); // Ensure Firebase initialization
-//   runApp(MyApp());
-// }
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -17,9 +13,12 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // await Get.putAsync(() => AuthController().init(), permanent: true);
-  // await Get.find<AuthController>().initAuth();
-  runApp(MyApp());
+  runApp(
+    ChangeNotifierProvider<AuthProvider>(
+      create: (context) => AuthProvider(),
+      child: MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -32,7 +31,7 @@ class MyApp extends StatelessWidget {
         '/': (context) => LoginPage(),
         '/signup': (context) => SignupPage(),
         '/dashboard': (context) => UploadScreen(),
-        '/upload': (context) => UploadScreen(), // Add this route
+        '/upload': (context) => UploadScreen(),
       },
     );
   }
@@ -46,17 +45,20 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   Future<void> _login() async {
+    AuthProvider authProvider =
+        Provider.of<AuthProvider>(context, listen: false);
+
     try {
-      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: emailController.text,
-        password: passwordController.text,
-      );
-      print('Login Successful: ${userCredential.user!.email}');
+      await authProvider.login(emailController.text, passwordController.text);
       Navigator.pushReplacementNamed(context, '/dashboard');
     } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Login Error: $e'),
+        ),
+      );
       print('Login Error: $e');
     }
   }
@@ -76,13 +78,19 @@ class _LoginPageState extends State<LoginPage> {
             TextField(
               controller: emailController,
               keyboardType: TextInputType.emailAddress,
-              decoration: InputDecoration(labelText: 'Email'),
+              decoration: InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(),
+              ),
             ),
             SizedBox(height: 12.0),
             TextField(
               controller: passwordController,
               obscureText: true,
-              decoration: InputDecoration(labelText: 'Password'),
+              decoration: InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
+              ),
             ),
             SizedBox(height: 20.0),
             ElevatedButton(
@@ -113,19 +121,26 @@ class _SignupPageState extends State<SignupPage> {
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController mobileNumberController = TextEditingController();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   Future<void> _signup() async {
+    AuthProvider authProvider =
+        Provider.of<AuthProvider>(context, listen: false);
+
     try {
-      UserCredential userCredential =
-          await _auth.createUserWithEmailAndPassword(
-        email: emailController.text,
-        password: passwordController.text,
+      await authProvider.signup(
+        emailController.text,
+        passwordController.text,
+        usernameController.text,
+        mobileNumberController.text,
       );
-      print('Signup Successful: ${userCredential.user!.email}');
       Navigator.pushReplacementNamed(context, '/dashboard');
     } catch (e) {
       print('Signup Error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Signup Error: $e'),
+        ),
+      );
     }
   }
 
@@ -145,24 +160,36 @@ class _SignupPageState extends State<SignupPage> {
               TextField(
                 controller: emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(labelText: 'Email'),
+                decoration: InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(),
+                ),
               ),
               SizedBox(height: 12.0),
               TextField(
                 controller: passwordController,
                 obscureText: true,
-                decoration: InputDecoration(labelText: 'Password'),
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  border: OutlineInputBorder(),
+                ),
               ),
               SizedBox(height: 12.0),
               TextField(
                 controller: usernameController,
-                decoration: InputDecoration(labelText: 'Username'),
+                decoration: InputDecoration(
+                  labelText: 'Username',
+                  border: OutlineInputBorder(),
+                ),
               ),
               SizedBox(height: 12.0),
               TextField(
                 controller: mobileNumberController,
                 keyboardType: TextInputType.phone,
-                decoration: InputDecoration(labelText: 'Mobile Number'),
+                decoration: InputDecoration(
+                  labelText: 'Mobile Number',
+                  border: OutlineInputBorder(),
+                ),
               ),
               SizedBox(height: 20.0),
               ElevatedButton(
@@ -184,29 +211,50 @@ class _SignupPageState extends State<SignupPage> {
   }
 }
 
-// class DashboardPage extends StatelessWidget {
-//   final FirebaseAuth _auth = FirebaseAuth.instance;
+class AuthProvider extends ChangeNotifier {
+  FirebaseAuth _auth = FirebaseAuth.instance;
 
-//   Future<void> _logout(BuildContext context) async {
-//     await _auth.signOut();
-//     Navigator.pushReplacementNamed(context, '/');
-//   }
+  User? _user;
 
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: Text('Dashboard'),
-//         actions: [
-//           IconButton(
-//             icon: Icon(Icons.logout),
-//             onPressed: () => _logout(context),
-//           ),
-//         ],
-//       ),
-//       body: Center(
-//         child: Text('Welcome to the Dashboard!'),
-//       ),
-//     );
-//   }
-// }
+  User? get user => _user;
+
+  Future<void> login(String email, String password) async {
+    try {
+      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      _user = userCredential.user;
+      notifyListeners();
+    } catch (e) {
+      print('Login Error: $e');
+      throw e;
+    }
+  }
+
+  Future<void> signup(
+    String email,
+    String password,
+    String username,
+    String mobileNumber,
+  ) async {
+    try {
+      UserCredential userCredential =
+          await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      _user = userCredential.user;
+      notifyListeners();
+    } catch (e) {
+      print('Signup Error: $e');
+      throw e;
+    }
+  }
+
+  Future<void> signout() async {
+    await _auth.signOut();
+    _user = null;
+    notifyListeners();
+  }
+}

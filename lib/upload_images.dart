@@ -21,6 +21,7 @@ class _UploadScreenState extends State<UploadScreen> {
   int uploadLimit = 5;
   List<File>? _pickedFile;
   bool _isLoading = false;
+
   // Future<void> _getImage() async {
   //   try {
   //     final image = await _imagePicker.pickImage(source: ImageSource.gallery);
@@ -38,20 +39,47 @@ class _UploadScreenState extends State<UploadScreen> {
   //   }
   // }
 
-  Future<void> _getImage() async {
+  // Future<void> _getImage() async {
+  //   try {
+  //     final result = await await FilePicker.platform
+  //         .pickFiles(allowMultiple: true, type: FileType.image);
+  //     if (result != null) {
+  //       setState(() {
+  //         _pickedFile = result.paths.map((path) => File(path!)).toList();
+  //       });
+  //     }
+  //   } catch (e) {
+  //     print('Error picking file: $e');
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //         content: Text('An error occurred while picking the file: $e'),
+  //       ),
+  //     );
+  //   }
+  // }
+  Future<void> _getImages() async {
     try {
-      final result = await await FilePicker.platform
+      final result = await FilePicker.platform
           .pickFiles(allowMultiple: true, type: FileType.image);
+
       if (result != null) {
         setState(() {
-          _pickedFile = result.paths.map((path) => File(path!)).toList();
+          // Check if the selected files are images
+          _pickedFile = result.files
+              .where((file) =>
+                  file.extension!.toLowerCase() == 'jpg' ||
+                  file.extension!.toLowerCase() == 'jpeg' ||
+                  file.extension!.toLowerCase() == 'png' ||
+                  file.extension!.toLowerCase() == 'gif')
+              .map((file) => File(file.path!))
+              .toList();
         });
       }
     } catch (e) {
-      print('Error picking file: $e');
+      print('Error picking files: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('An error occurred while picking the file: $e'),
+          content: Text('An error occurred while picking the files: $e'),
         ),
       );
     }
@@ -109,6 +137,8 @@ class _UploadScreenState extends State<UploadScreen> {
             content: Text('Images uploaded successfully.'),
           ),
         );
+        _uploadImagesCount();
+
         setState(() {
           _isLoading = false;
         });
@@ -131,6 +161,28 @@ class _UploadScreenState extends State<UploadScreen> {
       });
     }
   }
+
+  int? _currentImageCount;
+
+  _uploadImagesCount() async {
+    try {
+      final user = _auth.currentUser;
+      final userId = user?.uid;
+
+      final userRef = _storage.ref().child('users/$userId');
+      final ListResult result = await userRef.list();
+      setState(() {
+        _currentImageCount = result.items.length;
+      });
+
+      return _currentImageCount;
+    } catch (e) {
+      print('Error getting image count: $e');
+      throw e; // Rethrow the exception to be handled by the calling code
+    }
+  }
+
+  // }
 
   // Future<void> _uploadImage() async {
   //   try {
@@ -209,7 +261,15 @@ class _UploadScreenState extends State<UploadScreen> {
     Navigator.pushReplacementNamed(context, '/');
   }
 
+  // dynamic imageCount = _uploadImagesCount();
   @override
+  // @override
+  void initState() {
+    _uploadImagesCount();
+    super.initState();
+    // You can add any initialization logic here
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -225,12 +285,25 @@ class _UploadScreenState extends State<UploadScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text("Total Images uploaded"),
+                SizedBox(
+                  width: 10,
+                ),
+                Text(_currentImageCount.toString()),
+              ],
+            ),
+            // print('Current image count: $imageCount');
+
+            // Text(_uploadImagescount.toString()),
             if (_pickedFile != null)
               for (final file in _pickedFile!)
                 Expanded(child: Image.file(File(file.path!))),
             SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _isLoading ? null : _getImage,
+              onPressed: _isLoading ? null : _getImages,
               child: Text('Pick Image'),
             ),
             SizedBox(height: 20),
